@@ -1,0 +1,39 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject PlantState State
+@inject AlarmService Alarms
+
+<header class="topbar">
+    <span class="plant">P-hus</span>
+    <nav>
+        <NavLink href="" Match="NavLinkMatch.All">Oversikt</NavLink>
+        <NavLink href="historikk">Historikk</NavLink>
+    </nav>
+    <span class="link @(State.Connected ? "ok" : "lost")">
+        @(State.Connected ? "Arduino tilkoblet" : "Ingen kontakt med Arduino")
+    </span>
+    @if (unacked > 0)
+    {
+        <span class="alarm-count">@unacked @(unacked == 1 ? "alarm" : "alarmer")</span>
+    }
+</header>
+
+<main>@Body</main>
+
+@code {
+    private int unacked;
+
+    protected override void OnInitialized()
+    {
+        State.Changed += OnChanged;
+        unacked = Alarms.OpenAlarms.Count(a => !a.Acknowledged);
+    }
+
+    private void OnChanged() => InvokeAsync(() =>
+    {
+        unacked = Alarms.OpenAlarms.Count(a => !a.Acknowledged);
+        StateHasChanged();
+    });
+
+    public void Dispose() => State.Changed -= OnChanged;
+}

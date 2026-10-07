@@ -1,0 +1,17 @@
+# Kopier til /etc/systemd/system/pcshmi.service, deretter:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pcshmi
+[Unit]
+Description=P-hus HMI (Blazor)
+After=network.target
+
+[Service]
+User=group4
+WorkingDirectory=/home/group4/pcshmi
+ExecStart=/home/group4/pcshmi/PcsHmi
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

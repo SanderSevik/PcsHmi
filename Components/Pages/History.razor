@@ -1,0 +1,133 @@
+@page "/historikk"
+@inject Database Db
+@inject AlarmService Alarms
+
+<PageTitle>P-hus – Historikk</PageTitle>
+
+<section class="panel wide">
+    <div class="panel-head">
+        <h2>Temperatur</h2>
+        <div class="segmented" role="group" aria-label="Tidsrom">
+            @foreach (var h in new[] { 1, 6, 24 })
+            {
+                <button class="@(hours == h ? "selected" : "")" @onclick="() => Load(h)">Siste @h t</button>
+            }
+        </div>
+    </div>
+
+    @if (points.Count < 2)
+    {
+        <p class="none">For lite data i dette tidsrommet. Det lagres én måling hvert 5. sekund.</p>
+    }
+    else
+    {
+        <svg class="chart" viewBox="0 0 @W @H" role="img" aria-label="Temperatur og settpunkt over tid">
+            @foreach (var t in yTicks)
+            {
+                var y = Y(t);
+                <g>
+                    <line class="grid" x1="@L" x2="@(W - R)" y1="@F(y)" y2="@F(y)" />
+                    <text class="axis" x="@(L - 8)" y="@F(y + 4)" text-anchor="end">@t.ToString("0", Nb)</text>
+                </g>
+            }
+            <line class="limit" x1="@L" x2="@(W - R)" y1="@F(Y(Alarms.HighLimit))" y2="@F(Y(Alarms.HighLimit))" />
+            <line class="limit" x1="@L" x2="@(W - R)" y1="@F(Y(Alarms.LowLimit))" y2="@F(Y(Alarms.LowLimit))" />
+
+            <polyline class="sp-line" points="@(Line(p => p.Setpoint))" />
+            <polyline class="pv-line" points="@(Line(p => p.T1))" />
+
+            @for (int i = 0; i <= 4; i++)
+            {
+                var t = from.AddTicks((to - from).Ticks / 4 * i);
+                <g>
+                    <text class="axis" x="@F(X(t))" y="@(H - 6)" text-anchor="middle">@t.ToLocalTime().ToString("HH:mm")</text>
+                </g>
+            }
+        </svg>
+        <p class="legend">
+            <span class="key pv"></span>Målt temperatur
+            <span class="key sp"></span>Settpunkt
+            <span class="key lim"></span>Alarmgrenser
+        </p>
+    }
+</section>
+
+<section class="panel wide">
+    <h2>Alarmlogg</h2>
+    @if (alarmLog.Count == 0)
+    {
+        <p class="none">Ingen alarmer registrert.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Start</th><th>Slutt</th><th>Alarm</th><th>Kvittert</th></tr></thead>
+                <tbody>
+                    @foreach (var a in alarmLog)
+                    {
+                        <tr>
+                            <td>@a.Start.ToLocalTime().ToString("dd.MM HH:mm:ss")</td>
+                            <td>@(a.End?.ToLocalTime().ToString("dd.MM HH:mm:ss") ?? "Aktiv")</td>
+                            <td>@a.Message</td>
+                            <td>@(a.Acknowledged ? "Ja" : "Nei")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@code {
+    private static readonly CultureInfo Nb = CultureInfo.GetCultureInfo("nb-NO");
+    private const int W = 900, H = 320, L = 48, R = 16, T = 16, B = 32;
+    private const int MaxPoints = 400;
+
+    private int hours = 1;
+    private DateTime from, to;
+    private double yMin, yMax;
+    private List<double> yTicks = new();
+    private List<Measurement> points = new();
+    private List<AlarmRecord> alarmLog = new();
+
+    protected override void OnInitialized() => Load(1);
+
+    private void Load(int h)
+    {
+        hours = h;
+        to = DateTime.UtcNow;
+        from = to.AddHours(-h);
+
+        var all = Db.GetMeasurementsSince(from);
+        // Tynn ut så SVG-en ikke får titusenvis av punkter
+        int step = Math.Max(1, all.Count / MaxPoints);
+        points = all.Where((_, i) => i % step == 0).ToList();
+
+        if (points.Count >= 2)
+        {
+            var values = points.SelectMany(p => new[] { p.T1, p.Setpoint })
+                               .Append(Alarms.LowLimit).Append(Alarms.HighLimit);
+            yMin = Math.Floor(values.Min() - 1);
+            yMax = Math.Ceiling(values.Max() + 1);
+            double span = yMax - yMin;
+            double stepY = span <= 10 ? 1 : span <= 25 ? 5 : 10;
+            yTicks = new();
+            for (double v = Math.Ceiling(yMin / stepY) * stepY; v <= yMax; v += stepY) yTicks.Add(v);
+        }
+
+        alarmLog = Db.GetAlarmHistory(50);
+    }
+
+    private double X(DateTime t) =>
+        L + (t - from).TotalSeconds / (to - from).TotalSeconds * (W - L - R);
+
+    private double Y(double v) =>
+        T + (yMax - v) / (yMax - yMin) * (H - T - B);
+
+    // SVG krever punktum som desimaltegn
+    private static string F(double v) => v.ToString("0.#", CultureInfo.InvariantCulture);
+
+    private string Line(Func<Measurement, double> select) =>
+        string.Join(" ", points.Select(p => $"{F(X(p.Timestamp))},{F(Y(select(p)))}"));
+}

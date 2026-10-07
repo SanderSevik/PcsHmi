@@ -1,0 +1,154 @@
+@page "/"
+@implements IDisposable
+@inject PlantState State
+@inject SerialService Serial
+@inject AlarmService Alarms
+
+<PageTitle>P-hus – Oversikt</PageTitle>
+
+@if (m is null)
+{
+    <p class="waiting">Venter på første måling fra Arduinoen. Sjekk at USB-kabelen er koblet til Pi-en.</p>
+}
+else
+{
+    <div class="layout">
+        <section class="panel temp">
+            <h2>Temperatur</h2>
+            <div class="value">@m.T1.ToString("0.0", Nb)<span class="unit">°C</span></div>
+
+            @* Analog stolpe: normalområde, alarmgrenser, settpunkt og målt verdi *@
+            <div class="scale" aria-hidden="true">
+                <div class="band low"  style="width:@Pct(Alarms.LowLimit)%"></div>
+                <div class="band high" style="left:@Pct(Alarms.HighLimit)%"></div>
+                <div class="sp" style="left:@Pct(m.Setpoint)%" title="Settpunkt"></div>
+                <div class="pv" style="left:@Pct(m.T1)%" title="Målt"></div>
+            </div>
+            <div class="scale-labels">
+                <span>@ScaleMin °C</span><span>@ScaleMax °C</span>
+            </div>
+
+            <dl>
+                <dt>Settpunkt</dt><dd>@m.Setpoint.ToString("0.0", Nb) °C</dd>
+                <dt>Alarmgrenser</dt><dd>@Alarms.LowLimit.ToString("0", Nb) – @Alarms.HighLimit.ToString("0", Nb) °C</dd>
+                <dt>Varme</dt><dd><span class="state @(m.Heat ? "on" : "")">@(m.Heat ? "På" : "Av")</span></dd>
+            </dl>
+
+            <div class="controls">
+                <button @onclick="() => Serial.SetSetpoint(m.Setpoint - 0.5)" aria-label="Senk settpunkt">−</button>
+                <input type="number" step="0.5" min="5" max="40" @bind="setpointInput" aria-label="Nytt settpunkt" />
+                <button @onclick="() => Serial.SetSetpoint(m.Setpoint + 0.5)" aria-label="Øk settpunkt">+</button>
+                <button class="primary" @onclick="() => Serial.SetSetpoint(setpointInput)">Sett settpunkt</button>
+            </div>
+        </section>
+
+        <section class="panel light">
+            <h2>Lys</h2>
+            <div class="value">@Percent(m.Light)<span class="unit">%</span></div>
+
+            <dl>
+                <dt>Modus</dt><dd>@(m.Mode == "AUTO" ? "Automatisk (lyssensor)" : "Manuell")</dd>
+                <dt>Lysstyrke</dt><dd>@Percent(m.Dim) %</dd>
+                <dt>Lyssensor</dt><dd>@m.Ldr <span class="hint">(@(m.Ldr < 500 ? "mørkt" : "lyst"))</span></dd>
+            </dl>
+
+            <div class="segmented" role="group" aria-label="Lysmodus">
+                <button class="@(m.Mode == "AUTO" ? "selected" : "")" @onclick="() => Serial.SetMode(true)">Automatisk</button>
+                <button class="@(m.Mode == "MAN" ? "selected" : "")" @onclick="() => Serial.SetMode(false)">Manuell</button>
+            </div>
+
+            <label class="slider">
+                Lysstyrke @Percent(dimInput) %
+                <input type="range" min="0" max="255" step="5"
+                       @bind="dimInput" @bind:event="oninput" @bind:after="DimChanged" />
+            </label>
+        </section>
+
+        <section class="panel alarms">
+            <h2>Alarmer</h2>
+            @if (Alarms.OpenAlarms.Count == 0)
+            {
+                <p class="none">Ingen aktive alarmer.</p>
+            }
+            else
+            {
+                <ul>
+                    @foreach (var a in Alarms.OpenAlarms)
+                    {
+                        <li class="@(a.Active ? "active" : "cleared") @(a.Acknowledged ? "acked" : "")">
+                            <time>@a.Start.ToLocalTime().ToString("HH:mm:ss")</time>
+                            <span class="msg">@a.Message</span>
+                            <span class="status">@(a.Active ? "Aktiv" : "Avsluttet")</span>
+                            @if (!a.Acknowledged)
+                            {
+                                <button @onclick="() => Alarms.Acknowledge(a.Id)">Kvitter</button>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    private static readonly CultureInfo Nb = CultureInfo.GetCultureInfo("nb-NO");
+    private const double ScaleMin = 10, ScaleMax = 35;
+
+    private Measurement? m;
+    private double setpointInput = 22;
+    private int dimInput = 128;
+    private DateTime lastDimEdit = DateTime.MinValue;
+    private CancellationTokenSource? dimDebounce;
+
+    protected override void OnInitialized()
+    {
+        m = State.Latest;
+        if (m != null)
+        {
+            setpointInput = m.Setpoint;
+            dimInput = m.Dim;
+        }
+        State.Changed += OnStateChanged;
+    }
+
+    private void OnStateChanged() => InvokeAsync(() =>
+    {
+        var first = m is null;
+        m = State.Latest;
+        if (m != null)
+        {
+            if (first) setpointInput = m.Setpoint;
+            // Følg encoderen, men ikke mens noen drar i glidebryteren
+            if ((DateTime.UtcNow - lastDimEdit).TotalSeconds > 2) dimInput = m.Dim;
+        }
+        StateHasChanged();
+    });
+
+    private async Task DimChanged()
+    {
+        lastDimEdit = DateTime.UtcNow;
+        // Send først når glidebryteren har stått stille i 150 ms
+        dimDebounce?.Cancel();
+        dimDebounce = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(150, dimDebounce.Token);
+            Serial.SetDim(dimInput);
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    // Invariant: CSS må ha punktum, ikke komma, uansett språkoppsett på Pi-en
+    private static string Pct(double celsius) =>
+        Math.Clamp((celsius - ScaleMin) / (ScaleMax - ScaleMin) * 100, 0, 100)
+            .ToString("0.0", CultureInfo.InvariantCulture);
+
+    private static int Percent(int pwm) => (int)Math.Round(pwm / 255.0 * 100);
+
+    public void Dispose()
+    {
+        State.Changed -= OnStateChanged;
+        dimDebounce?.Cancel();
+    }
+}

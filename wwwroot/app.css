@@ -1,0 +1,218 @@
+/* P-hus HMI
+   Stil etter "high performance HMI"-prinsippet: nøytrale gråtoner i normal drift,
+   farge brukes bare for det som krever oppmerksomhet (alarmer). */
+
+:root {
+    --bg: #d9dcdf;
+    --panel: #f1f2f3;
+    --ink: #1f2b36;
+    --muted: #5b6874;
+    --line: #b5bcc2;
+    --control: #35617f;
+    --control-ink: #ffffff;
+    --alarm: #c0261b;
+    --alarm-soft: #f6d9d6;
+    --ok: #2f6b45;
+    --radius: 4px;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+    font-size: 16px;
+    color: var(--ink);
+    background: var(--bg);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; line-height: 1.45; }
+
+/* ---------------------------------------------------------------- toppfelt */
+.topbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1.25rem;
+    padding: .6rem 1.25rem;
+    background: var(--ink);
+    color: #e8ecef;
+}
+.topbar .plant { font-weight: 700; font-size: 1.1rem; }
+.topbar nav { display: flex; gap: .25rem; }
+.topbar nav a {
+    color: #c3ccd3;
+    text-decoration: none;
+    padding: .35rem .7rem;
+    border-radius: var(--radius);
+}
+.topbar nav a.active { background: #34434f; color: #fff; }
+.topbar nav a:hover { color: #fff; }
+.topbar .link { margin-left: auto; font-size: .9rem; display: flex; align-items: center; gap: .45rem; }
+.topbar .link::before {
+    content: ""; width: .6rem; height: .6rem; border-radius: 50%;
+    background: #8fc29f;
+}
+.topbar .link.lost { color: #ffb4ad; font-weight: 600; }
+.topbar .link.lost::before { background: var(--alarm); }
+.alarm-count {
+    background: var(--alarm);
+    color: #fff;
+    font-weight: 700;
+    padding: .25rem .65rem;
+    border-radius: var(--radius);
+    animation: blink 1s steps(2, start) infinite;
+}
+@keyframes blink { to { visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) { .alarm-count { animation: none; } }
+
+/* ---------------------------------------------------------------- layout */
+main { padding: 1.25rem; max-width: 1200px; margin: 0 auto; }
+.layout {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1rem;
+    align-items: start;
+}
+.layout .alarms { grid-column: 1 / -1; }
+
+.panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem 1.25rem;
+}
+.panel.wide { margin-bottom: 1rem; }
+.panel h2 { margin: 0 0 .5rem; font-size: 1rem; font-weight: 600; color: var(--muted); }
+.panel-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .75rem; }
+
+.waiting, .none { color: var(--muted); }
+
+/* ---------------------------------------------------------------- prosessverdier */
+.value {
+    font-size: 3.25rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+    margin-bottom: .75rem;
+}
+.unit { font-size: 1.25rem; font-weight: 400; color: var(--muted); margin-left: .25rem; }
+
+dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: .3rem 1rem;
+    margin: 1rem 0;
+}
+dt { color: var(--muted); }
+dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 500; }
+.hint { color: var(--muted); font-weight: 400; }
+
+.state {
+    display: inline-block;
+    padding: 0 .55rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+}
+.state.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+/* Analog temperaturstolpe: normalområde grått, utenfor grensene skravert */
+.scale {
+    position: relative;
+    height: 1.4rem;
+    background: #e3e6e8;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+}
+.scale .band {
+    position: absolute; top: 0; bottom: 0;
+    background: repeating-linear-gradient(135deg, #c9ced2 0 4px, #e3e6e8 4px 8px);
+}
+.scale .band.low { left: 0; }
+.scale .band.high { right: 0; }
+.scale .sp {
+    position: absolute; top: -4px; bottom: -4px; width: 0;
+    border-left: 2px dashed var(--control);
+}
+.scale .pv {
+    position: absolute; top: 50%; width: .9rem; height: .9rem;
+    transform: translate(-50%, -50%) rotate(45deg);
+    background: var(--ink);
+}
+.scale-labels {
+    display: flex; justify-content: space-between;
+    font-size: .8rem; color: var(--muted); margin-top: .2rem;
+}
+
+/* ---------------------------------------------------------------- betjening */
+button, input { font: inherit; }
+button {
+    min-height: 2.5rem;
+    padding: .35rem .9rem;
+    border: 1px solid var(--control);
+    border-radius: var(--radius);
+    background: #fff;
+    color: var(--control);
+    cursor: pointer;
+}
+button:hover { background: #e7eef3; }
+button.primary { background: var(--control); color: var(--control-ink); }
+button.primary:hover { background: #2a4f69; }
+:focus-visible { outline: 3px solid #f0b400; outline-offset: 2px; }
+
+.controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.controls input[type=number] {
+    width: 5.5rem; min-height: 2.5rem; padding: .3rem .5rem;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    font-variant-numeric: tabular-nums;
+}
+
+.segmented { display: inline-flex; }
+.segmented button { border-radius: 0; margin-left: -1px; }
+.segmented button:first-child { border-radius: var(--radius) 0 0 var(--radius); margin-left: 0; }
+.segmented button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+.segmented button.selected { background: var(--control); color: var(--control-ink); }
+
+.slider { display: block; margin-top: 1rem; color: var(--muted); }
+.slider input { display: block; width: 100%; margin-top: .4rem; accent-color: var(--control); }
+
+/* ---------------------------------------------------------------- alarmer */
+.alarms ul { list-style: none; margin: 0; padding: 0; }
+.alarms li {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    gap: .75rem;
+    align-items: center;
+    padding: .5rem .75rem;
+    border-left: 6px solid var(--alarm);
+    background: var(--alarm-soft);
+    margin-bottom: .4rem;
+}
+.alarms li.acked { background: #fff; }
+.alarms li.cleared { border-left-color: var(--muted); }
+.alarms li.cleared.acked { display: none; }
+.alarms time { font-variant-numeric: tabular-nums; color: var(--muted); }
+.alarms .msg { font-weight: 600; }
+.alarms .status { font-size: .9rem; }
+.alarms li.active .status { color: var(--alarm); font-weight: 700; }
+
+/* ---------------------------------------------------------------- historikk */
+.chart { width: 100%; height: auto; display: block; margin-top: .75rem; }
+.chart .grid { stroke: #d2d7db; stroke-width: 1; }
+.chart .axis { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.chart .limit { stroke: var(--alarm); stroke-width: 1; stroke-dasharray: 2 4; }
+.chart .pv-line { fill: none; stroke: var(--ink); stroke-width: 2; }
+.chart .sp-line { fill: none; stroke: var(--control); stroke-width: 1.5; stroke-dasharray: 6 4; }
+
+.legend { display: flex; flex-wrap: wrap; gap: .4rem 1.25rem; align-items: center; color: var(--muted); font-size: .9rem; }
+.legend .key { display: inline-block; width: 1.5rem; margin-right: .4rem; vertical-align: middle; border-top: 2px solid; }
+.legend .key.pv { border-color: var(--ink); }
+.legend .key.sp { border-top: 2px dashed var(--control); }
+.legend .key.lim { border-top: 2px dotted var(--alarm); }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; }
+
+@media (max-width: 600px) {
+    main { padding: .75rem; }
+    .value { font-size: 2.5rem; }
+    .alarms li { grid-template-columns: 1fr auto; }
+    .alarms time, .alarms .status { grid-column: 1; }
+}
